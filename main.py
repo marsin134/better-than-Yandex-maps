@@ -1,13 +1,11 @@
 import io
-from PyQt5 import uic
+from PyQt5 import uic, QtCore
 from PyQt5.QtWidgets import QMainWindow, QApplication
 from PyQt5.QtGui import QPixmap, QImage
 import sys
 
 import requests
 from PIL import Image
-
-
 
 template = """<?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
@@ -67,45 +65,61 @@ toponym = json_response["response"]["GeoObjectCollection"][
 low = toponym['boundedBy']['Envelope']['lowerCorner']
 up = toponym['boundedBy']['Envelope']['upperCorner']
 
-# Координаты центра топонима:
-toponym_coodrinates = toponym["Point"]["pos"]
-# Долгота и широта:
-toponym_longitude, toponym_lattitude = toponym_coodrinates.split(" ")
 
-delta = '0.005'
+def get_im(delta, toponyms=json_response["response"]["GeoObjectCollection"][
+    "featureMember"][0]["GeoObject"]):
+    # Координаты центра топонима:
+    toponym_coodrinates = toponyms["Point"]["pos"]
+    # Долгота и широта:
+    toponym_longitude, toponym_lattitude = toponym_coodrinates.split(" ")
 
-# Собираем параметры для запроса к StaticMapsAPI:
-map_params = {
-    "ll": ",".join([toponym_longitude, toponym_lattitude]),
-    "spn": ",".join([delta, delta]),
-    "l": "map"
-}
+    # Собираем параметры для запроса к StaticMapsAPI:
+    map_params = {
+        "ll": ",".join([toponym_longitude, toponym_lattitude]),
+        "spn": ",".join([str(delta), str(delta)]),
+        "l": "map"
+    }
 
-map_api_server = "http://static-maps.yandex.ru/1.x/"
-response = requests.get(map_api_server, params=map_params)
+    map_api_server = "http://static-maps.yandex.ru/1.x/"
+    responses = requests.get(map_api_server, params=map_params)
 
-im1 = Image.open(io.BytesIO(response.content))
+    image = Image.open(io.BytesIO(responses.content))
+    return image
 
 
 class DBSample(QMainWindow):
-    def __init__(self, im):
+    def __init__(self):
         super().__init__()
         f = io.StringIO(template)
         uic.loadUi(f, self)
+        self.delta = 0.01
+        self.start()
+
+    def start(self):
+        im = get_im(self.delta)
         im = im.convert("RGB")
         data = im.tobytes("raw", "RGB")
         qi = QImage(data, im.size[0], im.size[1], im.size[0] * 3, QImage.Format.Format_RGB888)
         self.pixmap = QPixmap.fromImage(qi)
-        self.start()
-
-    def start(self):
         self.label_im.setPixmap(self.pixmap)
+
+    def keyPressEvent(self, event):
+        key = event.key()
+        if key == QtCore.Qt.Key_Up:
+            if self.delta > 0.001:
+                self.delta -= self.delta / 1.5
+                self.start()
+        elif key == QtCore.Qt.Key_Down:
+            if self.delta < 50:
+                self.delta += self.delta / 1.5
+                self.start()
+        print(self.delta)
 
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
 
-    ex = DBSample(im1)
+    ex = DBSample()
     ex.show()
 
     sys.exit(app.exec_())
