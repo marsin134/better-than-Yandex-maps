@@ -7,40 +7,6 @@ import sys
 import requests
 from PIL import Image
 
-template = """<?xml version="1.0" encoding="UTF-8"?>
-<ui version="4.0">
- <class>QMainWindow</class>
- <widget class="QMainWindow" name="QMainWindow">
-  <property name="geometry">
-   <rect>
-    <x>0</x>
-    <y>0</y>
-    <width>538</width>
-    <height>414</height>
-   </rect>
-  </property>
-  <property name="windowTitle">
-   <string>Dialog</string>
-  </property>
-  <widget class="QLabel" name="label_im">
-   <property name="geometry">
-    <rect>
-     <x>20</x>
-     <y>20</y>
-     <width>501</width>
-     <height>301</height>
-    </rect>
-   </property>
-   <property name="text">
-    <string/>
-   </property>
-  </widget>
- </widget>
- <resources/>
- <connections/>
-</ui>
-"""
-
 toponym_to_find = " ".join(sys.argv[1:])
 
 geocoder_api_server = "http://geocode-maps.yandex.ru/1.x/"
@@ -66,37 +32,22 @@ low = toponym['boundedBy']['Envelope']['lowerCorner']
 up = toponym['boundedBy']['Envelope']['upperCorner']
 
 
-def get_im(delta, toponyms=json_response["response"]["GeoObjectCollection"][
-    "featureMember"][0]["GeoObject"]):
-    # Координаты центра топонима:
-    toponym_coodrinates = toponyms["Point"]["pos"]
-    # Долгота и широта:
-    toponym_longitude, toponym_lattitude = toponym_coodrinates.split(" ")
-
-    # Собираем параметры для запроса к StaticMapsAPI:
-    map_params = {
-        "ll": ",".join([toponym_longitude, toponym_lattitude]),
-        "spn": ",".join([str(delta), str(delta)]),
-        "l": "map"
-    }
-
-    map_api_server = "http://static-maps.yandex.ru/1.x/"
-    responses = requests.get(map_api_server, params=map_params)
-
-    image = Image.open(io.BytesIO(responses.content))
-    return image
-
-
 class DBSample(QMainWindow):
     def __init__(self):
         super().__init__()
-        f = io.StringIO(template)
-        uic.loadUi(f, self)
+        uic.loadUi('designer.ui', self)
         self.delta = 0.01
-        self.start()
 
-    def start(self):
-        im = get_im(self.delta)
+        toponyms = json_response["response"]["GeoObjectCollection"][
+            "featureMember"][0]["GeoObject"]
+        toponym_coodrinates = toponyms["Point"]["pos"]
+        # Долгота и широта:
+        self.toponym_longitude, self.toponym_lattitude = (float(elem) for elem in toponym_coodrinates.split(" "))
+
+        self.draw_image()
+
+    def draw_image(self):
+        im = self.get_im()
         im = im.convert("RGB")
         data = im.tobytes("raw", "RGB")
         qi = QImage(data, im.size[0], im.size[1], im.size[0] * 3, QImage.Format.Format_RGB888)
@@ -105,15 +56,53 @@ class DBSample(QMainWindow):
 
     def keyPressEvent(self, event):
         key = event.key()
-        if key == QtCore.Qt.Key_Up:
+        if key == QtCore.Qt.Key_W:
             if self.delta > 0.001:
                 self.delta -= self.delta / 1.5
-                self.start()
-        elif key == QtCore.Qt.Key_Down:
+                self.draw_image()
+        elif key == QtCore.Qt.Key_S:
             if self.delta < 50:
                 self.delta += self.delta / 1.5
-                self.start()
-        print(self.delta)
+                self.draw_image()
+        elif key == QtCore.Qt.Key_Left:
+            if not (self.toponym_longitude - self.delta < -180):
+                self.toponym_longitude -= self.delta
+            else:
+                self.toponym_longitude = 179
+            self.draw_image()
+        elif key == QtCore.Qt.Key_Right:
+            if not (self.toponym_longitude + self.delta > 180):
+                self.toponym_longitude += self.delta
+            else:
+                self.toponym_longitude = -179
+            self.draw_image()
+        elif key == QtCore.Qt.Key_Up:
+            if not (self.toponym_lattitude + self.delta / 1.5 > 90):
+                self.toponym_lattitude += self.delta / 1.5
+            else:
+                self.toponym_lattitude = 80
+            self.draw_image()
+        elif key == QtCore.Qt.Key_Down:
+            if not (self.toponym_lattitude - self.delta / 1.5 < -90):
+                self.toponym_lattitude -= self.delta / 1.5
+            else:
+                self.toponym_lattitude = -80
+            self.draw_image()
+
+    def get_im(self):
+        # Собираем параметры для запроса к StaticMapsAPI:
+        map_params = {
+            "ll": ",".join([str(self.toponym_longitude),
+                            str(self.toponym_lattitude)]),
+            "spn": ",".join([str(self.delta), str(self.delta)]),
+            "l": "map"
+        }
+
+        map_api_server = "http://static-maps.yandex.ru/1.x/"
+        responses = requests.get(map_api_server, params=map_params)
+
+        image = Image.open(io.BytesIO(responses.content))
+        return image
 
 
 if __name__ == '__main__':
