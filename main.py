@@ -37,12 +37,15 @@ class DBSample(QMainWindow):
         super().__init__()
         uic.loadUi('designer.ui', self)
         self.delta = 0.01
+        self.index = 0
 
         toponyms = json_response["response"]["GeoObjectCollection"][
             "featureMember"][0]["GeoObject"]
         toponym_coodrinates = toponyms["Point"]["pos"]
         # Долгота и широта:
         self.toponym_longitude, self.toponym_lattitude = (float(elem) for elem in toponym_coodrinates.split(" "))
+
+        self.pushButton.clicked.connect(self.redact_index)
 
         self.draw_image()
 
@@ -55,34 +58,33 @@ class DBSample(QMainWindow):
         self.label_im.setPixmap(self.pixmap)
 
     def keyPressEvent(self, event):
-        key = event.key()
-        if key == QtCore.Qt.Key_W:
+        if event.key() == QtCore.Qt.Key_X:
             if self.delta > 0.001:
                 self.delta -= self.delta / 1.5
                 self.draw_image()
-        elif key == QtCore.Qt.Key_S:
+        elif event.key() == QtCore.Qt.Key_Z:
             if self.delta < 50:
                 self.delta += self.delta / 1.5
                 self.draw_image()
-        elif key == QtCore.Qt.Key_Left:
+        elif event.key() == QtCore.Qt.Key_A:
             if not (self.toponym_longitude - self.delta < -180):
                 self.toponym_longitude -= self.delta
             else:
                 self.toponym_longitude = 179
             self.draw_image()
-        elif key == QtCore.Qt.Key_Right:
+        elif event.key() == QtCore.Qt.Key_D:
             if not (self.toponym_longitude + self.delta > 180):
                 self.toponym_longitude += self.delta
             else:
                 self.toponym_longitude = -179
             self.draw_image()
-        elif key == QtCore.Qt.Key_Up:
+        elif event.key() == QtCore.Qt.Key_W:
             if not (self.toponym_lattitude + self.delta / 1.5 > 90):
                 self.toponym_lattitude += self.delta / 1.5
             else:
                 self.toponym_lattitude = 80
             self.draw_image()
-        elif key == QtCore.Qt.Key_Down:
+        elif event.key() == QtCore.Qt.Key_S:
             if not (self.toponym_lattitude - self.delta / 1.5 < -90):
                 self.toponym_lattitude -= self.delta / 1.5
             else:
@@ -95,7 +97,7 @@ class DBSample(QMainWindow):
             "ll": ",".join([str(self.toponym_longitude),
                             str(self.toponym_lattitude)]),
             "spn": ",".join([str(self.delta), str(self.delta)]),
-            "l": "map"
+            "l": ["map", 'sat', 'skl'][self.index]
         }
 
         map_api_server = "http://static-maps.yandex.ru/1.x/"
@@ -103,6 +105,10 @@ class DBSample(QMainWindow):
 
         image = Image.open(io.BytesIO(responses.content))
         return image
+
+    def redact_index(self):
+        self.index = (self.index + 1) % 3
+        self.draw_image()
 
 
 if __name__ == '__main__':
